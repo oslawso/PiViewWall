@@ -10,6 +10,11 @@ width = 1920
 height = 1080
 fullscreen = true
 
+[gstreamer]
+rtsp_protocol = "tcp"
+tls_validate = false
+latency = 100
+
 [cameras]
 [[cameras.feed]]
 name = "FrontDoor"

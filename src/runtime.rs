@@ -1,4 +1,4 @@
-use crate::config::{Config, FeedConfig, WindowRect};
+use crate::config::{Config, FeedConfig, GStreamerConfig, WindowRect};
 use crate::layout::RenderLayout;
 use std::process::Child;
 use std::time::Duration;
@@ -69,15 +69,13 @@ impl FeedRuntime {
         let command = match &self.last_command {
             Some(command) => command.clone(),
             None => {
-                let x = self.window.left;
-                let y = self.window.top;
-                format!(
-                    "gst-launch-1.0 rtspsrc location=\"{}\" latency=100 ! rtph264depay ! decodebin ! videoconvert ! videoscale ! waylandsink fullscreen=false window=x={x},y={y},width={},height={} display={}x{}",
-                    self.url,
+                let backend = GStreamerBackend::new(GStreamerConfig::default(), "wayland-0".to_string());
+                backend.build_command(
+                    &self.url,
+                    self.window.left,
+                    self.window.top,
                     self.window.width(),
                     self.window.height(),
-                    self.window.right.max(1),
-                    self.window.bottom.max(1)
                 )
             }
         };
@@ -109,8 +107,47 @@ pub trait MediaBackend {
     fn launch_plan(&self, feed: &FeedRuntime, layout: &RenderLayout) -> Result<MediaLaunchPlan, String>;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GStreamerBackend;
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct GStreamerBackend {
+    pub config: GStreamerConfig,
+    pub display_name: String,
+}
+
+impl GStreamerBackend {
+    pub fn new(config: GStreamerConfig, display_name: String) -> Self {
+        Self {
+            config,
+            display_name,
+        }
+    }
+
+    fn build_command(
+        &self,
+        url: &str,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    ) -> String {
+        let protocol = self.config.rtsp_protocol.as_str();
+        let protocol_clause = match protocol {
+            "udp" => " protocols=udp",
+            _ => " protocols=tcp",
+        };
+        let tls_clause = if self.config.tls_validate { "" } else { " tls-validation-flags=0" };
+        let render_rect = format!("{x},{y},{width},{height}");
+
+        format!(
+            "gst-launch-1.0 rtspsrc location=\"{}\"{}{} latency={} ! rtph264depay ! decodebin ! videoconvert ! videoscale ! waylandsink display={} fullscreen=false render-rectangle=\"{}\"",
+            url,
+            protocol_clause,
+            tls_clause,
+            self.config.latency,
+            self.display_name,
+            render_rect
+        )
+    }
+}
 
 impl MediaBackend for GStreamerBackend {
     fn launch_plan(&self, feed: &FeedRuntime, layout: &RenderLayout) -> Result<MediaLaunchPlan, String> {
@@ -118,21 +155,16 @@ impl MediaBackend for GStreamerBackend {
             return Err(format!("feed '{}' has no RTSP URL to launch", feed.name));
         }
 
-        let width = layout.width;
-        let height = layout.height;
         let x = feed.window.left;
         let y = feed.window.top;
-        let window = format!(
-            "x={x},y={y},width={},height={}",
-            feed.window.width(),
-            feed.window.height()
-        );
-
-        let summary = format!(
-            "gst-launch-1.0 rtspsrc location=\"{}\" latency=100 ! rtph264depay ! decodebin ! videoconvert ! videoscale ! waylandsink fullscreen=false window={window} display={}x{}",
-            feed.url,
+        let width = feed.window.width();
+        let height = feed.window.height();
+        let summary = self.build_command(
+            &feed.url,
+            x,
+            y,
             width,
-            height
+            height,
         );
 
         Ok(MediaLaunchPlan {
@@ -353,6 +385,11 @@ width = 1920
 height = 1080
 fullscreen = true
 
+[gstreamer]
+rtsp_protocol = "tcp"
+tls_validate = false
+latency = 100
+
 [cameras]
 [[cameras.feed]]
 name = "FrontDoor"
@@ -364,10 +401,49 @@ window = "0,0,960,540"
 
         let layout = RenderLayout::from_config(&config).expect("layout should be valid");
         let feed = FeedRuntime::from_config(&config.cameras.feed[0]);
-        let launch = GStreamerBackend.launch_plan(&feed, &layout).expect("launch plan should be built");
+        let backend = GStreamerBackend::new(config.gstreamer.clone(), config.display.wayland_display.clone());
+        let launch = backend.launch_plan(&feed, &layout).expect("launch plan should be built");
 
         assert!(launch.summary.contains("rtspsrc location=\"rtsp://camera.example/stream\""));
+        assert!(launch.summary.contains("protocols=tcp"));
+        assert!(launch.summary.contains("tls-validation-flags=0"));
+        assert!(launch.summary.contains("latency=100"));
+        assert!(launch.summary.contains("display=wayland-0"));
+        assert!(launch.summary.contains("render-rectangle=\"0,0,960,540\""));
+        assert!(!launch.summary.contains("window=x="));
         assert!(launch.backend == "gstreamer");
+    }
+
+    #[test]
+    fn gstreamer_defaults_are_pi_safe() {
+        let config = Config::from_str(
+            r#"
+[app]
+name = "PiViewWall"
+room = "main"
+
+[display]
+width = 1920
+height = 1080
+fullscreen = true
+
+[gstreamer]
+rtsp_protocol = "tcp"
+tls_validate = false
+latency = 100
+
+[cameras]
+[[cameras.feed]]
+name = "FrontDoor"
+url = "rtsp://camera.example/stream"
+window = "0,0,960,540"
+"#,
+        )
+        .expect("config should parse");
+
+        assert_eq!(config.gstreamer.rtsp_protocol, "tcp");
+        assert!(!config.gstreamer.tls_validate);
+        assert_eq!(config.gstreamer.latency, 100);
     }
 
     #[test]

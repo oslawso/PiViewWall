@@ -43,9 +43,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         .map_err(|err| format!("invalid display layout: {err}"))?;
     render_layout.render_summary();
 
+    let backend = GStreamerBackend::new(config.gstreamer.clone(), config.display.wayland_display.clone());
     let mut stream_manager = StreamManager::from_config(&config);
     stream_manager
-        .launch_with_backend(&GStreamerBackend, &render_layout)
+        .launch_with_backend(&backend, &render_layout)
         .map_err(|err| format!("failed to launch streams: {err}"))?;
     stream_manager.print_status();
 

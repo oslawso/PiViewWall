@@ -60,6 +60,12 @@ pub struct DisplayConfig {
     pub width: u32,
     pub height: u32,
     pub fullscreen: bool,
+    #[serde(default = "default_wayland_display")]
+    pub wayland_display: String,
+}
+
+fn default_wayland_display() -> String {
+    "wayland-0".to_string()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -74,10 +80,34 @@ pub struct CameraConfig {
     pub feed: Vec<FeedConfig>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Default)]
+pub struct GStreamerConfig {
+    #[serde(default = "default_rtsp_protocol")]
+    pub rtsp_protocol: String,
+    #[serde(default = "default_tls_validate")]
+    pub tls_validate: bool,
+    #[serde(default = "default_latency")]
+    pub latency: u32,
+}
+
+fn default_rtsp_protocol() -> String {
+    "tcp".to_string()
+}
+
+fn default_tls_validate() -> bool {
+    false
+}
+
+fn default_latency() -> u32 {
+    100
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Config {
     pub app: AppConfig,
     pub display: DisplayConfig,
+    #[serde(default)]
+    pub gstreamer: GStreamerConfig,
     pub cameras: CameraConfig,
 }
 
@@ -102,6 +132,21 @@ impl Config {
 
         if self.display.width == 0 || self.display.height == 0 {
             return Err("display width and height must be greater than zero".to_string());
+        }
+
+        if self.display.wayland_display.trim().is_empty() {
+            return Err("display.wayland_display cannot be empty".to_string());
+        }
+
+        if self.gstreamer.latency == 0 {
+            return Err("gstreamer.latency must be greater than zero".to_string());
+        }
+
+        if !matches!(self.gstreamer.rtsp_protocol.as_str(), "tcp" | "udp") {
+            return Err(format!(
+                "gstreamer.rtsp_protocol must be 'tcp' or 'udp'; got '{}'",
+                self.gstreamer.rtsp_protocol
+            ));
         }
 
         if self.cameras.feed.is_empty() {
@@ -141,8 +186,11 @@ impl Config {
     pub fn print_summary(&self) {
         println!("Camera wall: {} ({})", self.app.name, self.app.room);
         println!(
-            "Display: {}x{} (fullscreen={})",
-            self.display.width, self.display.height, self.display.fullscreen
+            "Display: {}x{} on {} (fullscreen={})",
+            self.display.width,
+            self.display.height,
+            self.display.wayland_display,
+            self.display.fullscreen
         );
         println!("Configured feeds: {}", self.cameras.feed.len());
 
@@ -171,6 +219,11 @@ room = "main"
 width = 1920
 height = 1080
 fullscreen = true
+
+[gstreamer]
+rtsp_protocol = "tcp"
+tls_validate = false
+latency = 100
 
 [cameras]
 [[cameras.feed]]
@@ -201,6 +254,11 @@ width = 1920
 height = 1080
 fullscreen = false
 
+[gstreamer]
+rtsp_protocol = "tcp"
+tls_validate = false
+latency = 100
+
 [cameras]
 [[cameras.feed]]
 name = "FrontDoor"
@@ -225,6 +283,11 @@ room = "main"
 width = 1920
 height = 1080
 fullscreen = true
+
+[gstreamer]
+rtsp_protocol = "tcp"
+tls_validate = false
+latency = 100
 
 [cameras]
 [[cameras.feed]]
