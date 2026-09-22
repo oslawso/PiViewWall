@@ -1,0 +1,32 @@
+# Example runtime configuration for PiViewWall.
+# Copy this file to /etc/PiViewWall/config.toml on the Pi and adjust values.
+
+[app]
+name = "PiViewWall"
+room = "main"
+
+[display]
+width = 1920
+height = 1080
+fullscreen = true
+
+[cameras]
+[[cameras.feed]]
+name = "FrontDoor"
+url = "rtsp://user:password@10.0.0.10:554/stream1"
+window = "0,0,960,540"
+
+[[cameras.feed]]
+name = "BackYard"
+url = "rtsp://user:password@10.0.0.11:554/stream1"
+window = "960,0,1920,540"
+
+[[cameras.feed]]
+name = "Garage"
+url = "rtsp://user:password@10.0.0.12:554/stream1"
+window = "0,540,960,1080"
+
+[[cameras.feed]]
+name = "Patio"
+url = "rtsp://user:password@10.0.0.13:554/stream1"
+window = "960,540,1920,1080"
