@@ -1,0 +1,1 @@
+C:\Users\oswal\Documents\Projects\PiViewWall\target\debug\rpi-camera-wall.exe: C:\Users\oswal\Documents\Projects\PiViewWall\src\config.rs C:\Users\oswal\Documents\Projects\PiViewWall\src\layout.rs C:\Users\oswal\Documents\Projects\PiViewWall\src\main.rs C:\Users\oswal\Documents\Projects\PiViewWall\src\runtime.rs
